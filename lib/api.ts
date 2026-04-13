@@ -190,3 +190,103 @@ export function sendTranscript(
     })
   );
 }
+
+export function sendTranscriptPartial(
+  ws: WebSocket,
+  body: {
+    text_delta: string;
+    speaker?: "user" | "interviewer";
+    confidence?: number;
+    start_ms?: number;
+    end_ms?: number;
+  }
+) {
+  ws.send(
+    JSON.stringify({
+      type: "transcript.partial",
+      speaker: body.speaker ?? "user",
+      text_delta: body.text_delta,
+      confidence: body.confidence,
+      start_ms: body.start_ms,
+      end_ms: body.end_ms,
+    })
+  );
+}
+
+export function sendTranscriptFinal(
+  ws: WebSocket,
+  body: {
+    text: string;
+    speaker?: "user" | "interviewer";
+    confidence?: number;
+    start_ms?: number;
+    end_ms?: number;
+    pause_before_ms?: number;
+    pause_after_ms?: number;
+  }
+) {
+  ws.send(
+    JSON.stringify({
+      type: "transcript.final",
+      speaker: body.speaker ?? "user",
+      text: body.text,
+      confidence: body.confidence,
+      start_ms: body.start_ms,
+      end_ms: body.end_ms,
+      pause_before_ms: body.pause_before_ms,
+      pause_after_ms: body.pause_after_ms,
+    })
+  );
+}
+
+export function sendCodeChanged(
+  ws: WebSocket,
+  body: {
+    language: string;
+    content_snapshot: string;
+    file_path?: string;
+    content_hash?: string;
+    diff_summary?: { additions?: number; deletions?: number };
+  }
+) {
+  const computedHash =
+    body.content_hash ||
+    (typeof window !== "undefined" && "btoa" in window
+      ? window.btoa(unescape(encodeURIComponent(body.content_snapshot))).slice(0, 32)
+      : String(body.content_snapshot.length));
+
+  ws.send(
+    JSON.stringify({
+      type: "code.changed",
+      language: body.language,
+      file_path: body.file_path ?? "main",
+      content_snapshot: body.content_snapshot,
+      content_hash: computedHash,
+      diff_summary: body.diff_summary,
+    })
+  );
+}
+
+export function sendCodeRunCompleted(
+  ws: WebSocket,
+  body: {
+    stdout?: string;
+    stderr?: string;
+    exit_code: number;
+    runtime_ms?: number;
+    tests_passed?: number;
+    tests_failed?: number;
+  }
+) {
+  ws.send(
+    JSON.stringify({
+      type: "code.run_completed",
+      stdout: body.stdout,
+      stderr: body.stderr,
+      exit_code: body.exit_code,
+      runtime_ms: body.runtime_ms,
+      tests_passed: body.tests_passed,
+      tests_failed: body.tests_failed,
+    })
+  );
+}

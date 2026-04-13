@@ -12,7 +12,7 @@ import {
   startSession,
   endSession,
   connectWebSocket,
-  sendTranscript,
+  sendTranscriptFinal,
 } from "@/lib/api"
 
 interface TranscriptMessage {
@@ -147,7 +147,10 @@ export default function BehavioralInterviewPage() {
     ])
 
     if (message.role === "user" && wsRef.current?.readyState === WebSocket.OPEN) {
-      sendTranscript(wsRef.current, message.content, "behavioral")
+      sendTranscriptFinal(wsRef.current, {
+        speaker: "user",
+        text: message.content,
+      })
     }
   }, [])
 

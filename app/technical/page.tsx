@@ -16,7 +16,8 @@ import {
   getRandomQuestion,
   submitCodeEvent,
   connectWebSocket,
-  sendTranscript,
+  sendTranscriptFinal,
+  sendCodeChanged,
   type Question,
 } from "@/lib/api"
 
@@ -162,7 +163,10 @@ export default function TechnicalInterviewPage() {
       ])
 
       if (message.role === "user" && wsRef.current?.readyState === WebSocket.OPEN) {
-        sendTranscript(wsRef.current, message.content, "coding")
+        sendTranscriptFinal(wsRef.current, {
+          speaker: "user",
+          text: message.content,
+        })
       }
     },
     []
@@ -177,6 +181,13 @@ export default function TechnicalInterviewPage() {
 
       const sid = sessionIdRef.current
       codeTimerRef.current = setTimeout(() => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          sendCodeChanged(wsRef.current, {
+            language: "javascript",
+            content_snapshot: value,
+            file_path: "main",
+          })
+        }
         submitCodeEvent({
           session_id: sid,
           language: "javascript",
