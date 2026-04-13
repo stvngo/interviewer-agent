@@ -10,7 +10,7 @@ interface Example {
 
 interface Problem {
   title: string
-  difficulty: "Easy" | "Medium" | "Hard"
+  difficulty: string
   description: string
   examples: Example[]
   constraints: string[]
@@ -22,7 +22,7 @@ interface ProblemPanelProps {
 }
 
 export function ProblemPanel({ problem, className }: ProblemPanelProps) {
-  const difficultyColor = {
+  const difficultyColor: Record<string, string> = {
     Easy: "text-emerald-400 bg-emerald-500/20",
     Medium: "text-amber-400 bg-amber-500/20",
     Hard: "text-rose-400 bg-rose-500/20",
