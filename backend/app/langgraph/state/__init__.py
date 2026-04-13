@@ -18,6 +18,7 @@ from .shared_types import (
     InterventionDecision,
     InterventionSource,
     InterventionUrgency,
+    InputEventType,
     InterviewerGoal,
     LastRunStatus,
     PendingControlAction,
@@ -66,4 +67,5 @@ __all__ = [
     "InterventionAction",
     "InterventionUrgency",
     "InterventionSource",
+    "InputEventType",
 ]

@@ -15,6 +15,8 @@ from app.langgraph.routers.round_router import (
     route_after_rubric_context,
     route_after_interviewer,
     route_after_live_input,
+    route_after_transcript_processing,
+    route_after_code_processing,
     route_after_end_round,
 )
 from app.langgraph.state import RuntimeState
@@ -28,6 +30,8 @@ def build_coding_subgraph(
     retrieve_rubric_context_node,
     run_interviewer_node,
     wait_for_input_node,
+    process_transcript_node,
+    process_code_signal_node,
     run_evaluator_node,
     decide_intervention_node,
     run_coach_node,
@@ -51,6 +55,8 @@ def build_coding_subgraph(
     graph.add_node("retrieve_rubric_context", retrieve_rubric_context_node)
     graph.add_node("run_interviewer", run_interviewer_node)
     graph.add_node("wait_for_input", wait_for_input_node)
+    graph.add_node("process_transcript", process_transcript_node)
+    graph.add_node("process_code_signal", process_code_signal_node)
     graph.add_node("run_evaluator", run_evaluator_node)
     graph.add_node("decide_intervention", decide_intervention_node)
     graph.add_node("run_coach", run_coach_node)
@@ -104,6 +110,26 @@ def build_coding_subgraph(
         "wait_for_input",
         route_after_live_input,
         {
+            "process_transcript": "process_transcript",
+            "process_code_signal": "process_code_signal",
+            "run_evaluator": "run_evaluator",
+        },
+    )
+
+    graph.add_conditional_edges(
+        "process_transcript",
+        route_after_transcript_processing,
+        {
+            "wait_for_input": "wait_for_input",
+            "run_evaluator": "run_evaluator",
+        },
+    )
+
+    graph.add_conditional_edges(
+        "process_code_signal",
+        route_after_code_processing,
+        {
+            "wait_for_input": "wait_for_input",
             "run_evaluator": "run_evaluator",
         },
     )

@@ -161,13 +161,20 @@ class MockReportService:
 
 class MockRetrievalService:
     def package_question_context(self, question_packet: dict, target: str) -> dict:
-        return {
+        payload = {
             "context_ref": f"question_ctx::{question_packet['question_id']}::{target}",
             "followup_context_ref": f"question_followups::{question_packet['question_id']}",
         }
+        if target == "evaluator":
+            payload["hidden_answer_ref"] = f"hidden_answer::{question_packet['question_id']}"
+        return payload
 
     def package_resume_context(self, resume_context: dict, **kwargs) -> dict:
-        return {"context_ref": f"resume_ctx::{kwargs.get('round_type', 'unknown')}"}
+        return {
+            "context_ref": (
+                f"resume_ctx::{kwargs.get('round_type', 'unknown')}::{kwargs.get('target', 'interviewer')}"
+            )
+        }
 
     def package_rubric_context(self, rubric_packet: dict, target: str) -> dict:
         return {"context_ref": f"rubric_ctx::{rubric_packet['round_type']}::{target}"}

@@ -40,7 +40,7 @@ CodeWindow
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -146,6 +146,12 @@ InterventionAction = Literal[
 InterventionUrgency = Literal["low", "medium", "high"]
 
 InterventionSource = Literal["policy_router", "evaluator", "timeout", "user_request"]
+InputEventType = Literal[
+    "transcript.partial",
+    "transcript.final",
+    "code.changed",
+    "code.run_completed",
+]
 
 
 class EntityRef(StateModel):
@@ -169,9 +175,19 @@ class InterventionDecision(StateModel):
 
 class RetrievalBundle(StateModel):
     question_context_ref: str | None = None
+    question_context_ref_interviewer: str | None = None
+    question_context_ref_evaluator: str | None = None
+    question_context_ref_coach: str | None = None
     rubric_context_ref: str | None = None
+    rubric_context_ref_interviewer: str | None = None
+    rubric_context_ref_evaluator: str | None = None
+    rubric_context_ref_coach: str | None = None
     resume_context_ref: str | None = None
+    resume_context_ref_interviewer: str | None = None
+    resume_context_ref_evaluator: str | None = None
+    resume_context_ref_coach: str | None = None
     followup_context_ref: str | None = None
+    hidden_answer_ref: str | None = None
     loaded_at: datetime | None = None
 
 

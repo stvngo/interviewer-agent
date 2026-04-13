@@ -66,6 +66,28 @@ def run_interviewer(
 
     result = interviewer_agent.invoke(agent_input)
 
+    user_state = new_state.round.transcript_window.user_current_state
+    # If the user is actively speaking, avoid talking over them.
+    if user_state == "speaking":
+        result["should_speak"] = False
+        result["spoken_response"] = None
+        result["response_goal"] = "acknowledge"
+        result["state_transition"] = "listening"
+        result["interruptible"] = True
+        result["wait_before_speaking_ms"] = 0
+
+    # Strong off-track signals should trigger concise redirect interruptions.
+    if (new_state.evaluation.off_track_score or 0) > 0.85:
+        result["should_speak"] = True
+        result["spoken_response"] = (
+            "Let's pause for a moment. You're drifting off the core problem; "
+            "please restate your approach in one sentence and continue from there."
+        )
+        result["response_goal"] = "redirect"
+        result["state_transition"] = "probing"
+        result["interruptible"] = True
+        result["wait_before_speaking_ms"] = 0
+
     new_state.interviewer.should_speak = result.get("should_speak", False)
     new_state.interviewer.pending_spoken_response = result.get("spoken_response")
     new_state.interviewer.response_goal = result.get("response_goal")

@@ -37,12 +37,23 @@ def retrieve_rubric_context(
     warnings: list[str] = []
 
     rubric_packet = rubric_service.get_rubric_runtime_packet(new_state.round.round_type)
-    packaged = retrieval_service.package_rubric_context(
+    packaged_interviewer = retrieval_service.package_rubric_context(
         rubric_packet=rubric_packet,
         target="interviewer",
     )
+    packaged_evaluator = retrieval_service.package_rubric_context(
+        rubric_packet=rubric_packet,
+        target="evaluator",
+    )
+    packaged_coach = retrieval_service.package_rubric_context(
+        rubric_packet=rubric_packet,
+        target="coach",
+    )
 
-    new_state.round.retrieval_bundle.rubric_context_ref = packaged["context_ref"]
+    new_state.round.retrieval_bundle.rubric_context_ref = packaged_interviewer["context_ref"]
+    new_state.round.retrieval_bundle.rubric_context_ref_interviewer = packaged_interviewer["context_ref"]
+    new_state.round.retrieval_bundle.rubric_context_ref_evaluator = packaged_evaluator["context_ref"]
+    new_state.round.retrieval_bundle.rubric_context_ref_coach = packaged_coach["context_ref"]
     new_state.round.retrieval_bundle.loaded_at = datetime.now(timezone.utc)
 
     return NodeResult(state=new_state, warnings=warnings)

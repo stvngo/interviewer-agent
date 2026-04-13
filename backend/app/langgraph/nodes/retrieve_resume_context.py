@@ -44,14 +44,32 @@ def retrieve_resume_context(
         warnings.append("No question_id present; resume retrieval may be less relevant.")
 
     resume_ctx = resume_service.get_resume_runtime_context(new_state.session.resume_id)
-    packaged = retrieval_service.package_resume_context(
+    packaged_interviewer = retrieval_service.package_resume_context(
         resume_context=resume_ctx,
         target_role=new_state.session.target_role,
+        target="interviewer",
+        round_type=new_state.round.round_type,
+        question_id=new_state.round.question_id,
+    )
+    packaged_evaluator = retrieval_service.package_resume_context(
+        resume_context=resume_ctx,
+        target_role=new_state.session.target_role,
+        target="evaluator",
+        round_type=new_state.round.round_type,
+        question_id=new_state.round.question_id,
+    )
+    packaged_coach = retrieval_service.package_resume_context(
+        resume_context=resume_ctx,
+        target_role=new_state.session.target_role,
+        target="coach",
         round_type=new_state.round.round_type,
         question_id=new_state.round.question_id,
     )
 
-    new_state.round.retrieval_bundle.resume_context_ref = packaged["context_ref"]
+    new_state.round.retrieval_bundle.resume_context_ref = packaged_interviewer["context_ref"]
+    new_state.round.retrieval_bundle.resume_context_ref_interviewer = packaged_interviewer["context_ref"]
+    new_state.round.retrieval_bundle.resume_context_ref_evaluator = packaged_evaluator["context_ref"]
+    new_state.round.retrieval_bundle.resume_context_ref_coach = packaged_coach["context_ref"]
     new_state.round.retrieval_bundle.loaded_at = datetime.now(timezone.utc)
 
     return NodeResult(state=new_state, warnings=warnings)

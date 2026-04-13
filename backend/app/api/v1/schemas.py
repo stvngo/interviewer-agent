@@ -45,13 +45,31 @@ class CreateSessionRequest(BaseModel):
     round_type: str = "coding"
     difficulty: str | None = None
     title: str | None = None
+    user_id: UUID | None = None
+    template_id: UUID | None = None
+    resume_id: UUID | None = None
+    target_role: str | None = None
+    strictness_mode: str = "neutral"
+    difficulty_mode: str = "manual"
+    voice_enabled: bool = True
+    video_enabled: bool = False
+    integrity_enabled: bool = False
 
 
 class SessionOut(BaseModel):
     session_id: UUID
+    user_id: UUID
     round_type: str
     difficulty: str | None = None
     title: str | None = None
+    template_id: UUID | None = None
+    resume_id: UUID | None = None
+    target_role: str | None = None
+    strictness_mode: str = "neutral"
+    difficulty_mode: str = "manual"
+    voice_enabled: bool = True
+    video_enabled: bool = False
+    integrity_enabled: bool = False
     status: str
     question_id: int | None = None
     created_at: datetime

@@ -18,6 +18,8 @@ RoundRoute = Literal[
     "advance_question",
     "end_round",
     "wait_for_input",
+    "process_transcript",
+    "process_code_signal",
     "__end__",
 ]
 
@@ -58,6 +60,23 @@ def route_after_live_input(state: RuntimeState) -> RoundRoute:
     """
     Once transcript/code processing occurs, evaluate progress.
     """
+    event_type = state.round.pending_input_event_type
+    if event_type in {"transcript.partial", "transcript.final"}:
+        return "process_transcript"
+    if event_type in {"code.changed", "code.run_completed"}:
+        return "process_code_signal"
+    return "run_evaluator"
+
+
+def route_after_transcript_processing(state: RuntimeState) -> RoundRoute:
+    if state.round.pending_input_event_type == "transcript.partial":
+        return "wait_for_input"
+    return "run_evaluator"
+
+
+def route_after_code_processing(state: RuntimeState) -> RoundRoute:
+    if state.round.pending_input_event_type == "code.changed":
+        return "wait_for_input"
     return "run_evaluator"
 
 

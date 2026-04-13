@@ -5,6 +5,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from langgraph.types import Command
+
+from app.langgraph.checkpointing.thread_config import build_thread_config
 from app.langgraph.graphs.round_graph import build_round_graph
 from app.langgraph.graphs.session_graph import build_session_graph
 from app.langgraph.nodes.advance_question import advance_question
@@ -23,11 +26,23 @@ from app.langgraph.nodes.run_interviewer import run_interviewer
 from app.langgraph.nodes.select_question import select_question
 from app.langgraph.nodes.wait_for_input import wait_for_input
 from app.langgraph.runtime.node_contracts import NodeResult
+from app.langgraph.runtime.persistence_sink import FilePersistenceSink
+from app.langgraph.state import RuntimeState
+from app.realtime.event_contracts import (
+    CodeChangedEvent,
+    CodeChangedPayload,
+    CodeRunCompletedEvent,
+    CodeRunCompletedPayload,
+    TranscriptFinalEvent,
+    TranscriptFinalPayload,
+    TranscriptPartialEvent,
+    TranscriptPartialPayload,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def _emit_node_result(result: NodeResult) -> None:
+def _emit_node_result(result: NodeResult, *, persistence_sink: Any | None = None, node_name: str | None = None) -> None:
     """Emit events and persistence intents via LangGraph stream writer when available."""
     try:
         from langgraph.config import get_stream_writer
@@ -37,9 +52,14 @@ def _emit_node_result(result: NodeResult) -> None:
             writer({"type": "event", "payload": event.model_dump(mode="json")})
         for intent in result.persistence_intents:
             writer({"type": "persist", "payload": intent.model_dump(mode="json")})
+            if persistence_sink is not None:
+                persistence_sink.record(intent, node_name=node_name)
         for warning in result.warnings:
             writer({"type": "warning", "message": warning})
     except Exception:
+        for intent in result.persistence_intents:
+            if persistence_sink is not None:
+                persistence_sink.record(intent, node_name=node_name)
         for warning in result.warnings:
             logger.warning("Node warning: %s", warning)
 
@@ -68,6 +88,7 @@ class GraphExecutor:
         evaluator_agent: Any,
         coach_agent: Any,
         checkpointer: Any = None,
+        persistence_sink: Any | None = None,
     ) -> None:
         self.session_service = session_service
         self.template_service = template_service
@@ -83,6 +104,7 @@ class GraphExecutor:
         self.evaluator_agent = evaluator_agent
         self.coach_agent = coach_agent
         self.checkpointer = checkpointer
+        self.persistence_sink = persistence_sink or FilePersistenceSink()
 
     # -------------------------
     # Node wrappers
@@ -95,7 +117,7 @@ class GraphExecutor:
             template_service=self.template_service,
             resume_service=self.resume_service,
         )
-        _emit_node_result(result)
+        _emit_node_result(result, persistence_sink=self.persistence_sink, node_name="load_session_context")
         return result.state
 
     def select_question_node(self, state):
@@ -104,7 +126,7 @@ class GraphExecutor:
             question_service=self.question_service,
             session_service=self.session_service,
         )
-        _emit_node_result(result)
+        _emit_node_result(result, persistence_sink=self.persistence_sink, node_name="select_question")
         return result.state
 
     def retrieve_question_context_node(self, state):
@@ -113,7 +135,7 @@ class GraphExecutor:
             retrieval_service=self.retrieval_service,
             question_service=self.question_service,
         )
-        _emit_node_result(result)
+        _emit_node_result(result, persistence_sink=self.persistence_sink, node_name="retrieve_question_context")
         return result.state
 
     def retrieve_resume_context_node(self, state):
@@ -122,7 +144,7 @@ class GraphExecutor:
             retrieval_service=self.retrieval_service,
             resume_service=self.resume_service,
         )
-        _emit_node_result(result)
+        _emit_node_result(result, persistence_sink=self.persistence_sink, node_name="retrieve_resume_context")
         return result.state
 
     def retrieve_rubric_context_node(self, state):
@@ -131,7 +153,7 @@ class GraphExecutor:
             retrieval_service=self.retrieval_service,
             rubric_service=self.rubric_service,
         )
-        _emit_node_result(result)
+        _emit_node_result(result, persistence_sink=self.persistence_sink, node_name="retrieve_rubric_context")
         return result.state
 
     def run_interviewer_node(self, state):
@@ -139,12 +161,12 @@ class GraphExecutor:
             state,
             interviewer_agent=self.interviewer_agent,
         )
-        _emit_node_result(result)
+        _emit_node_result(result, persistence_sink=self.persistence_sink, node_name="run_interviewer")
         return result.state
 
     def wait_for_input_node(self, state):
         result = wait_for_input(state)
-        _emit_node_result(result)
+        _emit_node_result(result, persistence_sink=self.persistence_sink, node_name="wait_for_input")
         return result.state
 
     def run_evaluator_node(self, state):
@@ -153,7 +175,7 @@ class GraphExecutor:
             evaluator_agent=self.evaluator_agent,
             scoring_service=self.scoring_service,
         )
-        _emit_node_result(result)
+        _emit_node_result(result, persistence_sink=self.persistence_sink, node_name="run_evaluator")
         return result.state
 
     def decide_intervention_node(self, state):
@@ -161,7 +183,7 @@ class GraphExecutor:
             state,
             template_service=self.template_service,
         )
-        _emit_node_result(result)
+        _emit_node_result(result, persistence_sink=self.persistence_sink, node_name="decide_intervention")
         return result.state
 
     def run_coach_node(self, state):
@@ -169,7 +191,7 @@ class GraphExecutor:
             state,
             coach_agent=self.coach_agent,
         )
-        _emit_node_result(result)
+        _emit_node_result(result, persistence_sink=self.persistence_sink, node_name="run_coach")
         return result.state
 
     def advance_question_node(self, state):
@@ -178,7 +200,7 @@ class GraphExecutor:
             session_service=self.session_service,
             question_service=self.question_service,
         )
-        _emit_node_result(result)
+        _emit_node_result(result, persistence_sink=self.persistence_sink, node_name="advance_question")
         return result.state
 
     def end_round_node(self, state):
@@ -187,7 +209,7 @@ class GraphExecutor:
             scoring_service=self.scoring_service,
             session_service=self.session_service,
         )
-        _emit_node_result(result)
+        _emit_node_result(result, persistence_sink=self.persistence_sink, node_name="end_round")
         return result.state
 
     def generate_report_node(self, state):
@@ -196,7 +218,100 @@ class GraphExecutor:
             report_service=self.report_service,
             scoring_service=self.scoring_service,
         )
-        _emit_node_result(result)
+        _emit_node_result(result, persistence_sink=self.persistence_sink, node_name="generate_report")
+        return result.state
+
+    def process_transcript_node(self, state):
+        payload = state.round.pending_input_event_payload or {}
+        event_type = state.round.pending_input_event_type
+        if event_type == "transcript.partial":
+            event = TranscriptPartialEvent(
+                session_id=state.session.session_id,
+                session_round_id=state.round.round_id,
+                session_question_id=state.round.session_question_id,
+                channel="transcript",
+                event_type="transcript.partial",
+                source="frontend",
+                persist_level="ephemeral",
+                payload=TranscriptPartialPayload(
+                    speaker=payload.get("speaker", "user"),
+                    text_delta=payload.get("text_delta", payload.get("text", "")),
+                    confidence=payload.get("confidence"),
+                    start_ms=payload.get("start_ms"),
+                    end_ms=payload.get("end_ms"),
+                ),
+            )
+        else:
+            event = TranscriptFinalEvent(
+                session_id=state.session.session_id,
+                session_round_id=state.round.round_id,
+                session_question_id=state.round.session_question_id,
+                channel="transcript",
+                event_type="transcript.final",
+                source="frontend",
+                persist_level="durable",
+                payload=TranscriptFinalPayload(
+                    speaker=payload.get("speaker", "user"),
+                    text=payload.get("text", ""),
+                    confidence=payload.get("confidence"),
+                    start_ms=payload.get("start_ms"),
+                    end_ms=payload.get("end_ms"),
+                    pause_before_ms=payload.get("pause_before_ms"),
+                    pause_after_ms=payload.get("pause_after_ms"),
+                ),
+            )
+        result = process_transcript(
+            state,
+            event=event,
+            transcript_service=self.transcript_service,
+        )
+        _emit_node_result(result, persistence_sink=self.persistence_sink, node_name="process_transcript")
+        return result.state
+
+    def process_code_signal_node(self, state):
+        payload = state.round.pending_input_event_payload or {}
+        event_type = state.round.pending_input_event_type
+        if event_type == "code.run_completed":
+            event = CodeRunCompletedEvent(
+                session_id=state.session.session_id,
+                session_round_id=state.round.round_id,
+                session_question_id=state.round.session_question_id,
+                channel="code",
+                event_type="code.run_completed",
+                source="frontend",
+                persist_level="durable",
+                payload=CodeRunCompletedPayload(
+                    stdout=payload.get("stdout"),
+                    stderr=payload.get("stderr"),
+                    exit_code=payload.get("exit_code", 0),
+                    runtime_ms=payload.get("runtime_ms"),
+                    tests_passed=payload.get("tests_passed"),
+                    tests_failed=payload.get("tests_failed"),
+                ),
+            )
+        else:
+            event = CodeChangedEvent(
+                session_id=state.session.session_id,
+                session_round_id=state.round.round_id,
+                session_question_id=state.round.session_question_id,
+                channel="code",
+                event_type="code.changed",
+                source="frontend",
+                persist_level="important",
+                payload=CodeChangedPayload(
+                    language=payload.get("language", "javascript"),
+                    file_path=payload.get("file_path", "main"),
+                    content_snapshot=payload.get("content_snapshot", payload.get("content", "")),
+                    content_hash=payload.get("content_hash", ""),
+                    diff_summary=payload.get("diff_summary"),
+                ),
+            )
+        result = process_code_signal(
+            state,
+            event=event,
+            code_event_service=self.code_event_service,
+        )
+        _emit_node_result(result, persistence_sink=self.persistence_sink, node_name="process_code_signal")
         return result.state
 
     # -------------------------
@@ -213,6 +328,8 @@ class GraphExecutor:
             retrieve_rubric_context_node=self.retrieve_rubric_context_node,
             run_interviewer_node=self.run_interviewer_node,
             wait_for_input_node=self.wait_for_input_node,
+            process_transcript_node=self.process_transcript_node,
+            process_code_signal_node=self.process_code_signal_node,
             run_evaluator_node=self.run_evaluator_node,
             decide_intervention_node=self.decide_intervention_node,
             run_coach_node=self.run_coach_node,
@@ -230,6 +347,8 @@ class GraphExecutor:
             retrieve_rubric_context_node=self.retrieve_rubric_context_node,
             run_interviewer_node=self.run_interviewer_node,
             wait_for_input_node=self.wait_for_input_node,
+            process_transcript_node=self.process_transcript_node,
+            process_code_signal_node=self.process_code_signal_node,
             run_evaluator_node=self.run_evaluator_node,
             decide_intervention_node=self.decide_intervention_node,
             run_coach_node=self.run_coach_node,
@@ -254,3 +373,26 @@ class GraphExecutor:
             generate_report_node=self.generate_report_node,
             checkpointer=self.checkpointer,
         )
+
+    def invoke_coding_graph(self, state):
+        graph = self.build_coding_graph()
+        config = build_thread_config(session_id=state.session.session_id, round_id=state.round.round_id)
+        output = graph.invoke(state, config=config)
+        return self._coerce_runtime_state(output)
+
+    def resume_coding_graph(self, state, *, resume_payload: dict[str, Any]):
+        state = self._coerce_runtime_state(state)
+        graph = self.build_coding_graph()
+        config = build_thread_config(session_id=state.session.session_id, round_id=state.round.round_id)
+        output = graph.invoke(Command(resume=resume_payload), config=config)
+        return self._coerce_runtime_state(output)
+
+    @staticmethod
+    def _coerce_runtime_state(value: Any) -> RuntimeState:
+        if isinstance(value, RuntimeState):
+            return value
+        if isinstance(value, dict):
+            if "__interrupt__" in value:
+                value = {k: v for k, v in value.items() if k != "__interrupt__"}
+            return RuntimeState.model_validate(value)
+        raise TypeError(f"Unexpected runtime state type: {type(value)!r}")

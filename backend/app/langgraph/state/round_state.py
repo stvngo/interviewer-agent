@@ -37,6 +37,7 @@ RoundGraphState
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from pydantic import Field
@@ -45,6 +46,7 @@ from .shared_types import (
     EvaluatorStatus,
     InterventionDecision,
     InterviewerGoal,
+    InputEventType,
     QuestionStatus,
     RetrievalBundle,
     RoundStatus,
@@ -94,3 +96,6 @@ class RoundGraphState(StateModel):
     evaluator_checkpoint_counter: int = 0
     code_checkpoint_counter: int = 0
     transcript_checkpoint_counter: int = 0
+
+    pending_input_event_type: InputEventType | None = None
+    pending_input_event_payload: dict[str, Any] | None = None

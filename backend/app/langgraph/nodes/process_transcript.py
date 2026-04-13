@@ -77,6 +77,8 @@ def process_transcript(
             "user_current_state",
             new_state.round.transcript_window.user_current_state,
         )
+        new_state.round.pending_input_event_type = None
+        new_state.round.pending_input_event_payload = None
 
         return NodeResult(
             state=new_state,
@@ -125,6 +127,8 @@ def process_transcript(
         "user_current_state",
         new_state.round.transcript_window.user_current_state,
     )
+    new_state.round.pending_input_event_type = None
+    new_state.round.pending_input_event_payload = None
 
     new_state.round.transcript_checkpoint_counter += 1
 

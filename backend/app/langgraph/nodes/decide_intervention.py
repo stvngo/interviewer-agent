@@ -99,6 +99,15 @@ def decide_intervention(
         source="policy_router",
     )
 
+    # Hard guardrail: if user is far off-track, force redirect unless wrapping up.
+    if (new_state.evaluation.off_track_score or 0) > 0.9 and decision.action not in {"wrap_up"}:
+        decision = InterventionDecision(
+            action="redirect",
+            reason="User is significantly off-track; redirect to core task.",
+            urgency="high",
+            source="policy_router",
+        )
+
     new_state.round.latest_intervention_decision = decision
     new_state.round.should_advance_question = decision.action == "advance"
     new_state.round.should_end_round = decision.action == "wrap_up"

@@ -87,6 +87,8 @@ def process_code_signal(
             "code_progress_state",
             new_state.round.code_window.code_progress_state,
         )
+        new_state.round.pending_input_event_type = None
+        new_state.round.pending_input_event_payload = None
 
         new_state.round.code_checkpoint_counter += 1
 
@@ -155,6 +157,8 @@ def process_code_signal(
     new_state.round.code_window.latest_stderr_excerpt = summary.get("latest_stderr_excerpt")
     new_state.round.code_window.tests_passed = summary.get("tests_passed")
     new_state.round.code_window.tests_failed = summary.get("tests_failed")
+    new_state.round.pending_input_event_type = None
+    new_state.round.pending_input_event_payload = None
 
     new_state.round.code_checkpoint_counter += 1
 

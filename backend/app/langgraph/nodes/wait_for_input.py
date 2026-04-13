@@ -45,6 +45,9 @@ def wait_for_input(
 
     if isinstance(user_input, dict):
         tw = new_state.round.transcript_window
+        if "type" in user_input:
+            new_state.round.pending_input_event_type = user_input["type"]
+            new_state.round.pending_input_event_payload = user_input
         if "text" in user_input:
             tw.rolling_text = (tw.rolling_text + " " + user_input["text"]).strip()
             tw.user_current_state = "speaking"

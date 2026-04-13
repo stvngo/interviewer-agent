@@ -47,13 +47,25 @@ def retrieve_question_context(
         return NodeResult(state=new_state, warnings=warnings)
 
     question_packet = question_service.get_question_runtime_packet(new_state.round.question_id)
-    packaged = retrieval_service.package_question_context(
+    packaged_interviewer = retrieval_service.package_question_context(
         question_packet=question_packet,
         target="interviewer",
     )
+    packaged_evaluator = retrieval_service.package_question_context(
+        question_packet=question_packet,
+        target="evaluator",
+    )
+    packaged_coach = retrieval_service.package_question_context(
+        question_packet=question_packet,
+        target="coach",
+    )
 
-    new_state.round.retrieval_bundle.question_context_ref = packaged["context_ref"]
-    new_state.round.retrieval_bundle.followup_context_ref = packaged.get("followup_context_ref")
+    new_state.round.retrieval_bundle.question_context_ref = packaged_interviewer["context_ref"]
+    new_state.round.retrieval_bundle.question_context_ref_interviewer = packaged_interviewer["context_ref"]
+    new_state.round.retrieval_bundle.question_context_ref_evaluator = packaged_evaluator["context_ref"]
+    new_state.round.retrieval_bundle.question_context_ref_coach = packaged_coach["context_ref"]
+    new_state.round.retrieval_bundle.followup_context_ref = packaged_interviewer.get("followup_context_ref")
+    new_state.round.retrieval_bundle.hidden_answer_ref = packaged_evaluator.get("hidden_answer_ref")
     new_state.round.retrieval_bundle.loaded_at = datetime.now(timezone.utc)
 
     return NodeResult(state=new_state, warnings=warnings)
