@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { MainLayout } from "@/components/main-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plus, Code, MessageSquare, Clock, Calendar, ArrowRight, Trash2 } from "lucide-react"
 import Link from "next/link"
+import { listSessions, type Session } from "@/lib/api"
 
 interface Interview {
   id: string
@@ -13,45 +14,41 @@ interface Interview {
   title: string
   date: Date
   duration: number
-  status: "completed" | "in-progress" | "scheduled"
+  status: string
 }
 
-const mockInterviews: Interview[] = [
-  {
-    id: "1",
-    type: "technical",
-    title: "Two Sum Problem",
-    date: new Date(2026, 3, 10, 14, 0),
-    duration: 45,
-    status: "completed",
-  },
-  {
-    id: "2",
-    type: "behavioral",
-    title: "Leadership Experience",
-    date: new Date(2026, 3, 11, 10, 30),
-    duration: 30,
-    status: "completed",
-  },
-  {
-    id: "3",
-    type: "technical",
-    title: "Binary Search Tree",
-    date: new Date(2026, 3, 12, 15, 0),
-    duration: 45,
-    status: "scheduled",
-  },
-]
+function sessionToInterview(s: Session): Interview {
+  return {
+    id: s.session_id,
+    type: s.round_type === "behavioral" ? "behavioral" : "technical",
+    title: s.title || `${s.round_type.charAt(0).toUpperCase() + s.round_type.slice(1)} Session`,
+    date: new Date(s.created_at),
+    duration: s.duration_minutes ?? 0,
+    status: s.status,
+  }
+}
 
 export default function HomePage() {
-  const [interviews, setInterviews] = useState<Interview[]>(mockInterviews)
+  const [interviews, setInterviews] = useState<Interview[]>([])
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    listSessions()
+      .then((res) => {
+        setInterviews(res.sessions.map(sessionToInterview))
+      })
+      .catch(() => {
+        // backend may not be running yet -- show empty state
+      })
+      .finally(() => setLoaded(true))
+  }, [])
 
   const deleteInterview = (id: string) => {
     setInterviews(interviews.filter((i) => i.id !== id))
   }
 
   const completedCount = interviews.filter((i) => i.status === "completed").length
-  const scheduledCount = interviews.filter((i) => i.status === "scheduled").length
+  const activeCount = interviews.filter((i) => i.status === "active" || i.status === "created").length
 
   return (
     <MainLayout>
@@ -107,11 +104,11 @@ export default function HomePage() {
           
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription>Scheduled</CardDescription>
-              <CardTitle className="text-3xl font-semibold">{scheduledCount}</CardTitle>
+              <CardDescription>Active</CardDescription>
+              <CardTitle className="text-3xl font-semibold">{activeCount}</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-xs text-muted-foreground">Upcoming sessions</p>
+              <p className="text-xs text-muted-foreground">In-progress sessions</p>
             </CardContent>
           </Card>
         </div>
@@ -157,7 +154,11 @@ export default function HomePage() {
           <h2 className="text-lg font-medium text-foreground mb-4">Recent Sessions</h2>
           <Card>
             <CardContent className="p-0">
-              {interviews.length === 0 ? (
+              {!loaded ? (
+                <div className="p-8 text-center">
+                  <p className="text-muted-foreground">Loading sessions...</p>
+                </div>
+              ) : interviews.length === 0 ? (
                 <div className="p-8 text-center">
                   <p className="text-muted-foreground">No interviews yet. Start your first session!</p>
                 </div>
@@ -183,10 +184,12 @@ export default function HomePage() {
                               <Calendar className="h-3 w-3" />
                               {interview.date.toLocaleDateString()}
                             </span>
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {interview.duration} min
-                            </span>
+                            {interview.duration > 0 && (
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {interview.duration} min
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -196,7 +199,7 @@ export default function HomePage() {
                           className={`text-xs px-2 py-1 rounded-full ${
                             interview.status === "completed"
                               ? "bg-emerald-500/20 text-emerald-400"
-                              : interview.status === "in-progress"
+                              : interview.status === "active"
                               ? "bg-amber-500/20 text-amber-400"
                               : "bg-secondary text-muted-foreground"
                           }`}

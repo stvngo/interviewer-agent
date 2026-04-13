@@ -1,12 +1,19 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import { MainLayout } from "@/components/main-layout"
 import { VoiceAgent } from "@/components/voice-agent"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Play, Square, RotateCcw, ChevronDown, ChevronUp, MessageSquare } from "lucide-react"
+import { Play, Square, RotateCcw, ChevronDown, ChevronUp, MessageSquare, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import {
+  createSession,
+  startSession,
+  endSession,
+  connectWebSocket,
+  sendTranscript,
+} from "@/lib/api"
 
 interface TranscriptMessage {
   id: string
@@ -21,30 +28,93 @@ const behavioralQuestions = [
   "Tell me about a project you are most proud of.",
   "Describe a time when you failed and how you handled it.",
   "Tell me about a time when you had to make a difficult decision.",
+  "Describe a time you had to learn something new quickly under pressure.",
+  "Tell me about a conflict you had with a teammate and how you resolved it.",
+  "Give an example of when you went above and beyond expectations.",
 ]
 
 export default function BehavioralInterviewPage() {
   const [isInterviewActive, setIsInterviewActive] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const [currentQuestion, setCurrentQuestion] = useState("")
   const [messages, setMessages] = useState<TranscriptMessage[]>([])
   const [isTranscriptOpen, setIsTranscriptOpen] = useState(false)
 
-  const startInterview = useCallback(() => {
-    setIsInterviewActive(true)
-    const randomQuestion = behavioralQuestions[Math.floor(Math.random() * behavioralQuestions.length)]
-    setCurrentQuestion(randomQuestion)
-    setMessages([
-      {
-        id: "1",
-        role: "interviewer",
-        content: `Hello! Welcome to your behavioral interview. Let me start with a question: ${randomQuestion}`,
-        timestamp: new Date(),
-      },
-    ])
+  const sessionIdRef = useRef<string | null>(null)
+  const wsRef = useRef<WebSocket | null>(null)
+
+  useEffect(() => {
+    return () => {
+      wsRef.current?.close()
+    }
   }, [])
 
-  const endInterview = useCallback(() => {
+  const pickRandomQuestion = () =>
+    behavioralQuestions[Math.floor(Math.random() * behavioralQuestions.length)]
+
+  const handleStartInterview = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const session = await createSession({ round_type: "behavioral" })
+      sessionIdRef.current = session.session_id
+      await startSession(session.session_id)
+
+      const ws = connectWebSocket(session.session_id, {
+        onMessage: (data) => {
+          if (data.type === "transcript.interviewer") {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: Date.now().toString(),
+                role: "interviewer",
+                content: data.content as string,
+                timestamp: new Date(),
+              },
+            ])
+          }
+        },
+      })
+      wsRef.current = ws
+
+      const randomQuestion = pickRandomQuestion()
+      setCurrentQuestion(randomQuestion)
+      setIsInterviewActive(true)
+      setMessages([
+        {
+          id: "1",
+          role: "interviewer",
+          content: `Hello! Welcome to your behavioral interview. Let me start with a question: ${randomQuestion}`,
+          timestamp: new Date(),
+        },
+      ])
+    } catch (err) {
+      console.error("Failed to start interview:", err)
+      setMessages([
+        {
+          id: "err",
+          role: "interviewer",
+          content: "Failed to connect to the server. Make sure the backend is running on port 8000.",
+          timestamp: new Date(),
+        },
+      ])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  const handleEndInterview = useCallback(async () => {
     setIsInterviewActive(false)
+    wsRef.current?.close()
+    wsRef.current = null
+
+    if (sessionIdRef.current) {
+      try {
+        await endSession(sessionIdRef.current)
+      } catch {
+        // best-effort
+      }
+    }
+
     setMessages((prev) => [
       ...prev,
       {
@@ -58,6 +128,9 @@ export default function BehavioralInterviewPage() {
 
   const resetInterview = useCallback(() => {
     setIsInterviewActive(false)
+    wsRef.current?.close()
+    wsRef.current = null
+    sessionIdRef.current = null
     setCurrentQuestion("")
     setMessages([])
   }, [])
@@ -73,31 +146,13 @@ export default function BehavioralInterviewPage() {
       },
     ])
 
-    // Simulate interviewer follow-up
-    if (message.role === "user") {
-      setTimeout(() => {
-        const followUps = [
-          "That is interesting. Can you tell me more about the specific challenges you faced?",
-          "How did that experience shape your approach to similar situations?",
-          "What would you do differently if you faced that situation again?",
-          "Can you elaborate on the outcome and what you learned?",
-        ]
-        const randomFollowUp = followUps[Math.floor(Math.random() * followUps.length)]
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: (Date.now() + 1).toString(),
-            role: "interviewer",
-            content: randomFollowUp,
-            timestamp: new Date(),
-          },
-        ])
-      }, 2000)
+    if (message.role === "user" && wsRef.current?.readyState === WebSocket.OPEN) {
+      sendTranscript(wsRef.current, message.content, "behavioral")
     }
   }, [])
 
   const nextQuestion = useCallback(() => {
-    const randomQuestion = behavioralQuestions[Math.floor(Math.random() * behavioralQuestions.length)]
+    const randomQuestion = pickRandomQuestion()
     setCurrentQuestion(randomQuestion)
     setMessages((prev) => [
       ...prev,
@@ -118,12 +173,16 @@ export default function BehavioralInterviewPage() {
           <h1 className="text-xl font-semibold text-foreground">Behavioral Interview</h1>
           <div className="flex items-center gap-2">
             {!isInterviewActive ? (
-              <Button onClick={startInterview} className="gap-2">
-                <Play className="h-4 w-4" />
-                Start Interview
+              <Button onClick={handleStartInterview} className="gap-2" disabled={isLoading}>
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+                {isLoading ? "Starting..." : "Start Interview"}
               </Button>
             ) : (
-              <Button onClick={endInterview} variant="destructive" className="gap-2">
+              <Button onClick={handleEndInterview} variant="destructive" className="gap-2">
                 <Square className="h-4 w-4" />
                 End Interview
               </Button>

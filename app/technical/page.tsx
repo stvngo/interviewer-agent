@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import { MainLayout } from "@/components/main-layout"
 import { ProblemPanel, type Problem } from "@/components/problem-panel"
 import { CodeEditor } from "@/components/code-editor"
@@ -8,66 +8,125 @@ import { VoiceAgent } from "@/components/voice-agent"
 import { Transcript, type TranscriptMessage } from "@/components/transcript"
 import { NotesPanel } from "@/components/notes-panel"
 import { Button } from "@/components/ui/button"
-import { Play, Square, RotateCcw } from "lucide-react"
+import { Play, Square, RotateCcw, Loader2 } from "lucide-react"
+import {
+  createSession,
+  startSession,
+  endSession,
+  getRandomQuestion,
+  submitCodeEvent,
+  connectWebSocket,
+  sendTranscript,
+  type Question,
+} from "@/lib/api"
 
-const sampleProblem: Problem = {
-  title: "Two Sum",
-  difficulty: "Easy",
-  description: `Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target.
-
-You may assume that each input would have exactly one solution, and you may not use the same element twice.
-
-You can return the answer in any order.`,
-  examples: [
-    {
-      input: "nums = [2,7,11,15], target = 9",
-      output: "[0,1]",
-      explanation: "Because nums[0] + nums[1] == 9, we return [0, 1].",
-    },
-    {
-      input: "nums = [3,2,4], target = 6",
-      output: "[1,2]",
-    },
-    {
-      input: "nums = [3,3], target = 6",
-      output: "[0,1]",
-    },
-  ],
-  constraints: [
-    "2 <= nums.length <= 10^4",
-    "-10^9 <= nums[i] <= 10^9",
-    "-10^9 <= target <= 10^9",
-    "Only one valid answer exists.",
-  ],
+const fallbackProblem: Problem = {
+  title: "Loading...",
+  difficulty: "Medium",
+  description: "Fetching a problem from the server...",
+  examples: [],
+  constraints: [],
 }
 
-const initialCode = `function twoSum(nums, target) {
-  // Your solution here
-  
-}`
+const initialCode = `// Your solution here\n`
 
-const initialMessages: TranscriptMessage[] = []
+function questionToProblem(q: Question): Problem {
+  return {
+    title: q.title,
+    difficulty: q.difficulty,
+    description: q.description,
+    examples: q.examples.map((e) => ({
+      input: e.input,
+      output: e.output,
+      explanation: e.explanation ?? undefined,
+    })),
+    constraints: q.constraints,
+  }
+}
 
 export default function TechnicalInterviewPage() {
   const [isInterviewActive, setIsInterviewActive] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [problem, setProblem] = useState<Problem>(fallbackProblem)
   const [code, setCode] = useState(initialCode)
   const [notes, setNotes] = useState("")
-  const [messages, setMessages] = useState<TranscriptMessage[]>(initialMessages)
+  const [messages, setMessages] = useState<TranscriptMessage[]>([])
 
-  const startInterview = useCallback(() => {
-    setIsInterviewActive(true)
-    setMessages([
-      {
-        id: "1",
-        role: "interviewer",
-        content: "Hello! Welcome to your technical interview. Today we will be working on the Two Sum problem. Please take a moment to read the problem description and let me know when you are ready to discuss your approach.",
-        timestamp: new Date(),
-      },
-    ])
+  const sessionIdRef = useRef<string | null>(null)
+  const wsRef = useRef<WebSocket | null>(null)
+  const codeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      wsRef.current?.close()
+      if (codeTimerRef.current) clearTimeout(codeTimerRef.current)
+    }
   }, [])
 
-  const endInterview = useCallback(() => {
+  const handleStartInterview = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const session = await createSession({ round_type: "coding" })
+      sessionIdRef.current = session.session_id
+      await startSession(session.session_id)
+
+      const q = await getRandomQuestion()
+      setProblem(questionToProblem(q))
+
+      const ws = connectWebSocket(session.session_id, {
+        onMessage: (data) => {
+          if (data.type === "transcript.interviewer") {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: Date.now().toString(),
+                role: "interviewer",
+                content: data.content as string,
+                timestamp: new Date(),
+              },
+            ])
+          }
+        },
+      })
+      wsRef.current = ws
+
+      setIsInterviewActive(true)
+      setMessages([
+        {
+          id: "1",
+          role: "interviewer",
+          content: `Hello! Welcome to your technical interview. Today we'll be working on "${q.title}". Please take a moment to read the problem description and let me know when you're ready to discuss your approach.`,
+          timestamp: new Date(),
+        },
+      ])
+    } catch (err) {
+      console.error("Failed to start interview:", err)
+      setMessages([
+        {
+          id: "err",
+          role: "interviewer",
+          content: "Failed to connect to the server. Make sure the backend is running on port 8000.",
+          timestamp: new Date(),
+        },
+      ])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  const handleEndInterview = useCallback(async () => {
     setIsInterviewActive(false)
+    wsRef.current?.close()
+    wsRef.current = null
+
+    if (sessionIdRef.current) {
+      try {
+        await endSession(sessionIdRef.current)
+      } catch {
+        // best-effort
+      }
+    }
+
     setMessages((prev) => [
       ...prev,
       {
@@ -81,37 +140,52 @@ export default function TechnicalInterviewPage() {
 
   const resetInterview = useCallback(() => {
     setIsInterviewActive(false)
+    wsRef.current?.close()
+    wsRef.current = null
+    sessionIdRef.current = null
+    setProblem(fallbackProblem)
     setCode(initialCode)
     setNotes("")
     setMessages([])
   }, [])
 
-  const handleTranscript = useCallback((message: { role: "interviewer" | "user"; content: string }) => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        role: message.role,
-        content: message.content,
-        timestamp: new Date(),
-      },
-    ])
+  const handleTranscript = useCallback(
+    (message: { role: "interviewer" | "user"; content: string }) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: message.role,
+          content: message.content,
+          timestamp: new Date(),
+        },
+      ])
 
-    // Simulate interviewer response
-    if (message.role === "user") {
-      setTimeout(() => {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: (Date.now() + 1).toString(),
-            role: "interviewer",
-            content: "That sounds like a good approach. Can you walk me through the time complexity of your solution?",
-            timestamp: new Date(),
-          },
-        ])
+      if (message.role === "user" && wsRef.current?.readyState === WebSocket.OPEN) {
+        sendTranscript(wsRef.current, message.content, "coding")
+      }
+    },
+    []
+  )
+
+  const handleCodeChange = useCallback(
+    (value: string) => {
+      setCode(value)
+
+      if (codeTimerRef.current) clearTimeout(codeTimerRef.current)
+      if (!sessionIdRef.current || !isInterviewActive) return
+
+      const sid = sessionIdRef.current
+      codeTimerRef.current = setTimeout(() => {
+        submitCodeEvent({
+          session_id: sid,
+          language: "javascript",
+          content: value,
+        }).catch(() => {})
       }, 2000)
-    }
-  }, [])
+    },
+    [isInterviewActive]
+  )
 
   return (
     <MainLayout>
@@ -121,12 +195,16 @@ export default function TechnicalInterviewPage() {
           <h1 className="text-xl font-semibold text-foreground">Technical Interview</h1>
           <div className="flex items-center gap-2">
             {!isInterviewActive ? (
-              <Button onClick={startInterview} className="gap-2">
-                <Play className="h-4 w-4" />
-                Start Interview
+              <Button onClick={handleStartInterview} className="gap-2" disabled={isLoading}>
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+                {isLoading ? "Starting..." : "Start Interview"}
               </Button>
             ) : (
-              <Button onClick={endInterview} variant="destructive" className="gap-2">
+              <Button onClick={handleEndInterview} variant="destructive" className="gap-2">
                 <Square className="h-4 w-4" />
                 End Interview
               </Button>
@@ -141,7 +219,7 @@ export default function TechnicalInterviewPage() {
         <div className="flex-1 flex gap-4 overflow-hidden">
           {/* Left Panel - Problem + Voice + Transcript (30%) */}
           <div className="w-[30%] flex flex-col gap-4 overflow-hidden">
-            <ProblemPanel problem={sampleProblem} className="flex-1 min-h-0" />
+            <ProblemPanel problem={problem} className="flex-1 min-h-0" />
             <VoiceAgent isActive={isInterviewActive} onTranscript={handleTranscript} />
             <Transcript messages={messages} className="h-48" />
           </div>
@@ -150,7 +228,7 @@ export default function TechnicalInterviewPage() {
           <div className="w-[70%] flex flex-col gap-4 overflow-hidden">
             <CodeEditor
               value={code}
-              onChange={setCode}
+              onChange={handleCodeChange}
               language="javascript"
               className="flex-1 min-h-0"
             />
