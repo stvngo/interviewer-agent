@@ -14,3 +14,27 @@ next.user-config.*
 node_modules
 .next/
 .DS_Store
+
+# Python virtual environments
+.venv/
+venv/
+backend/.venv/
+
+# Environment files
+.env
+.env.*
+backend/.env
+backend/.env.*
+
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
