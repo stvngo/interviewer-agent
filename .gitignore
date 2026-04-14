@@ -38,3 +38,5 @@ __pycache__/
 htmlcov/
 dist/
 build/
+.cursor/mcp.json
+backend/app/db/leetcode_dataset - lc.csv
