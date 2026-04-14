@@ -16,7 +16,6 @@ import {
   getRandomQuestion,
   submitCodeEvent,
   connectWebSocket,
-  sendTranscriptFinal,
   sendCodeChanged,
   type Question,
 } from "@/lib/api"
@@ -161,13 +160,6 @@ export default function TechnicalInterviewPage() {
           timestamp: new Date(),
         },
       ])
-
-      if (message.role === "user" && wsRef.current?.readyState === WebSocket.OPEN) {
-        sendTranscriptFinal(wsRef.current, {
-          speaker: "user",
-          text: message.content,
-        })
-      }
     },
     []
   )
@@ -231,7 +223,7 @@ export default function TechnicalInterviewPage() {
           {/* Left Panel - Problem + Voice + Transcript (30%) */}
           <div className="w-[30%] flex flex-col gap-4 overflow-hidden">
             <ProblemPanel problem={problem} className="flex-1 min-h-0" />
-            <VoiceAgent isActive={isInterviewActive} onTranscript={handleTranscript} />
+            <VoiceAgent isActive={isInterviewActive} sessionId={sessionIdRef.current} onTranscript={handleTranscript} />
             <Transcript messages={messages} className="h-48" />
           </div>
 

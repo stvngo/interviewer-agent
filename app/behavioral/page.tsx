@@ -12,7 +12,6 @@ import {
   startSession,
   endSession,
   connectWebSocket,
-  sendTranscriptFinal,
 } from "@/lib/api"
 
 interface TranscriptMessage {
@@ -145,13 +144,6 @@ export default function BehavioralInterviewPage() {
         timestamp: new Date(),
       },
     ])
-
-    if (message.role === "user" && wsRef.current?.readyState === WebSocket.OPEN) {
-      sendTranscriptFinal(wsRef.current, {
-        speaker: "user",
-        text: message.content,
-      })
-    }
   }, [])
 
   const nextQuestion = useCallback(() => {
@@ -216,7 +208,7 @@ export default function BehavioralInterviewPage() {
 
           {/* Voice Agent - Centered */}
           <div className="w-full max-w-md">
-            <VoiceAgent isActive={isInterviewActive} onTranscript={handleTranscript} />
+            <VoiceAgent isActive={isInterviewActive} sessionId={sessionIdRef.current} onTranscript={handleTranscript} />
           </div>
 
           {/* Next Question Button */}

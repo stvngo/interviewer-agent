@@ -290,3 +290,70 @@ export function sendCodeRunCompleted(
     })
   );
 }
+
+// --- Audio WebSocket ---
+
+export function connectAudioWebSocket(
+  sessionId: string,
+  mode: "langgraph" | "convai" = "langgraph",
+  handlers: {
+    onMessage?: (data: Record<string, unknown>) => void;
+    onOpen?: () => void;
+    onClose?: () => void;
+    onError?: (e: Event) => void;
+  }
+): WebSocket {
+  const ws = new WebSocket(`${WS_URL}/ws/audio/${sessionId}`);
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ mode }));
+    handlers.onOpen?.();
+  };
+  ws.onclose = () => handlers.onClose?.();
+  ws.onerror = (e) => handlers.onError?.(e);
+
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      handlers.onMessage?.(data);
+    } catch {
+      // ignore non-JSON messages
+    }
+  };
+
+  return ws;
+}
+
+export function sendAudioChunk(ws: WebSocket, audioBase64: string) {
+  ws.send(
+    JSON.stringify({
+      type: "audio.chunk",
+      audio_base64: audioBase64,
+    })
+  );
+}
+
+export function sendAudioControl(
+  ws: WebSocket,
+  action: "mute" | "unmute" | "stop" | "commit"
+) {
+  ws.send(
+    JSON.stringify({
+      type: "audio.control",
+      action,
+    })
+  );
+}
+
+// --- ConvAI Agent ---
+
+export interface ConvAIAgentResponse {
+  agent_id: string;
+  name: string;
+}
+
+export function createConvAIAgent() {
+  return request<ConvAIAgentResponse>("/convai/agent", {
+    method: "POST",
+  });
+}

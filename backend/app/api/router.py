@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from app.api.v1 import auth, users, profiles, resumes, question_banks, questions, rubrics, templates
 from app.api.v1 import sessions, rounds, transcripts, code_events, scoring, reports, media
-from app.api.v1 import analytics, integrity, admin, health, ws
+from app.api.v1 import analytics, integrity, admin, health, ws, audio_ws, convai
 
 
 api_router = APIRouter()
@@ -28,4 +28,6 @@ api_router.include_router(integrity.router, prefix="/v1/integrity", tags=["integ
 api_router.include_router(admin.router, prefix="/v1/admin", tags=["admin"])
 api_router.include_router(health.router, prefix="/v1", tags=["health"])
 api_router.include_router(ws.router, prefix="/v1", tags=["websocket"])
+api_router.include_router(audio_ws.router, prefix="/v1", tags=["audio-websocket"])
+api_router.include_router(convai.router, prefix="/v1/convai", tags=["convai"])
 
